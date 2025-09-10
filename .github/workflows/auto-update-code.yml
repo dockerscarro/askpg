@@ -28,13 +28,18 @@ jobs:
           pip install --upgrade pip
           pip install openai
 
+      # Save issue body safely (handles emojis, backticks, etc.)
+      - name: Save issue body
+        run: |
+          echo '${{ toJSON(github.event.issue.body) }}' > issue_body.txt
+
+      # Run Python script
       - name: Run Python script to update code
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          printf "%s" "${{ github.event.issue.body }}" > issue_body.txt
           python update_code.py "${{ github.event.issue.title }}" issue_body.txt
-
+          # 👆 if your script is inside a folder, adjust the path accordingly
 
       # Commit and push
       - name: Commit & push changes
