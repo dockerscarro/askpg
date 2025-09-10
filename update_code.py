@@ -41,14 +41,15 @@ Here are the current code files:
         prompt += f"\n===== {path} =====\n{content}\n"
 
     prompt += """
-Please update only the files that are affected by this issue.
-Return results strictly in this format for each updated file:
+    Please update only store.py based on the issue.
+    Return the **entire file content** of store.py in this format:
+    
+    FILE: store.py
+    <updated file content>
+    
+    Do not include explanations. Do not use code fences. Only return the updated file content.
+    """
 
-FILE: <filepath>
-<updated file content>
-
-Do not include explanations. Only return the updated files.
-"""
 
     # Call OpenAI
     response = client.chat.completions.create(
