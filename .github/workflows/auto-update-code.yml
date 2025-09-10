@@ -28,21 +28,13 @@ jobs:
           pip install --upgrade pip
           pip install openai
 
-            # Save issue body safely
-      - name: Save issue body
-        run: |
-          cat <<'EOF' > issue_body.txt
-          ${{ toJSON(github.event.issue.body) }}
-          EOF
-
-
       # Run Python script
       - name: Run Python script to update code
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
+          echo "${{ github.event.issue.body }}" > issue_body.txt
           python update_code.py "${{ github.event.issue.title }}" issue_body.txt
-          # 👆 if your script is inside a folder, adjust the path accordingly
 
       # Commit and push
       - name: Commit & push changes
@@ -67,4 +59,6 @@ jobs:
           base: main
           title: "Fix issue #${{ github.event.issue.number }}"
           body: |
-            This pull request was automatically created to fix app.py for issue #${{ github.event.issue.number }}.
+            This pull request was automatically created to fix the calculate_total() function.
+
+
