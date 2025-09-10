@@ -17,16 +17,17 @@ def main():
 
     # Collect current .py files (skip .github folder)
     # Only include store.py, ignore all others
-     # Collect current .py files (skip .github folder)
+    # Collect only store.py
     code_files = {}
-    for root, _, files in os.walk("."):
-        if ".github" in root:
-            continue
-        for file in files:
-            if file.endswith(".py"):
-                path = os.path.join(root, file)
-                with open(path, "r", encoding="utf-8") as f:
-                    code_files[path] = f.read()
+    target_file = "store.py"
+    
+    if os.path.exists(target_file):
+        with open(target_file, "r", encoding="utf-8") as f:
+            code_files[target_file] = f.read()
+    else:
+        print(f"{target_file} not found.")
+        sys.exit(1)
+
 
 
     # Prepare prompt with all .py files
