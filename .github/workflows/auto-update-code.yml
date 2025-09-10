@@ -46,7 +46,7 @@ jobs:
 
           BRANCH_NAME="issue-fix-${{ github.event.issue.number }}"
           git checkout -b $BRANCH_NAME
-          git add app.py
+          git add -A
           git commit -m "Automated fix for issue #${{ github.event.issue.number }}" || echo "No changes to commit"
           git push -u origin $BRANCH_NAME
 
