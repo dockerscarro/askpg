@@ -1,3 +1,5 @@
+Here is the updated Python code with input validation and error handling:
+
 import sqlite3
 import os
 from datetime import datetime
@@ -41,6 +43,10 @@ def list_tasks():
 def update_task_status(task_id, new_status):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    c.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+    if c.fetchone() is None:
+        print("❌ Task not found.")
+        return
     c.execute("UPDATE tasks SET status = ? WHERE id = ?", (new_status, task_id))
     conn.commit()
     conn.close()
@@ -49,6 +55,10 @@ def update_task_status(task_id, new_status):
 def delete_task(task_id):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    c.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+    if c.fetchone() is None:
+        print("❌ Task not found.")
+        return
     c.execute("DELETE FROM tasks WHERE id = ?", (task_id,))
     conn.commit()
     conn.close()
@@ -72,11 +82,19 @@ def main():
         elif choice == "2":
             list_tasks()
         elif choice == "3":
-            task_id = int(input("Task ID: "))
+            try:
+                task_id = int(input("Task ID: "))
+            except ValueError:
+                print("❌ Invalid Task ID. Please enter an integer.")
+                continue
             status = input("New status (pending/done): ")
             update_task_status(task_id, status)
         elif choice == "4":
-            task_id = int(input("Task ID: "))
+            try:
+                task_id = int(input("Task ID: "))
+            except ValueError:
+                print("❌ Invalid Task ID. Please enter an integer.")
+                continue
             delete_task(task_id)
         elif choice == "5":
             print("👋 Goodbye!")
@@ -86,3 +104,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+This updated code includes input validation for task ID and error handling for database operations. It also checks if a task exists before updating or deleting it.
