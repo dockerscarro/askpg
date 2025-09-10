@@ -11,26 +11,25 @@ def main():
     issue_body_file = sys.argv[2]
 
     with open(issue_body_file, "r", encoding="utf-8") as f:
-        issue_body = f.read().replace('\r','')
+        issue_body = f.read().replace("\r", "")
 
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # Collect current .py files (skip .github folder)
-        # Collect only app.py
+    # Only target app.py (you can add more files to this list if needed)
+    target_files = ["app.py"]
     code_files = {}
-    target_files = ["app.py"]  # you can extend this list if needed
 
     for filepath in target_files:
         if os.path.exists(filepath):
             with open(filepath, "r", encoding="utf-8") as f:
                 code_files[filepath] = f.read()
-              
-    # Prepare prompt with all .py files
+
+    # Prepare prompt
     prompt = f"""
 Issue Title: {issue_title}
 Issue Body: {issue_body}
 
-Here are the current code files:
+Here is the current code file(s):
 """
     for path, content in code_files.items():
         prompt += f"\n===== {path} =====\n{content}\n"
@@ -50,11 +49,12 @@ Do not include explanations. Only return the updated files.
         model="gpt-4o",
         messages=[
             {"role": "system", "content": "You are an expert Python developer."},
-            {"role": "user", "content": prompt}
-        ]
+            {"role": "user", "content": prompt},
+        ],
     )
 
-    updated_code = response.choices[0].message["content"].strip()
+    # Handle response correctly (new SDK returns structured objects)
+    updated_code = response.choices[0].message.content.strip()
 
     # Parse and write updated files
     for block in updated_code.split("FILE: "):
@@ -75,7 +75,7 @@ Do not include explanations. Only return the updated files.
         with open(filepath, "w", encoding="utf-8") as f:
             f.write(new_content)
 
-        print(f"Updated file: {filepath}")
+        print(f"✅ Updated file: {filepath}")
 
 if __name__ == "__main__":
     main()
