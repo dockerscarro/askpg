@@ -46,7 +46,7 @@ jobs:
 
           BRANCH_NAME="issue-fix-${{ github.event.issue.number }}"
           git checkout -b $BRANCH_NAME
-          git add *.py
+          git add store.py
           git commit -m "Automated fix for issue #${{ github.event.issue.number }}" || echo "No changes to commit"
           git push -u origin $BRANCH_NAME
 
@@ -60,5 +60,3 @@ jobs:
           title: "Fix issue #${{ github.event.issue.number }}"
           body: |
             This pull request was automatically created to fix the calculate_total() function.
-
-
