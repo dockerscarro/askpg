@@ -54,7 +54,7 @@ Do not include explanations. Only return the updated files.
         ]
     )
 
-    updated_code = response.choices[0].message.content.strip()
+    updated_code = response.choices[0].message["content"].strip()
 
     # Parse and write updated files
     for block in updated_code.split("FILE: "):
