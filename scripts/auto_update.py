@@ -30,27 +30,29 @@ prompt = f"""
 Issue: {issue_title}
 Description: {issue_body}
 
-Here is the existing Python code:
+Here is the full existing Python code from {target_file}:
 {code}
 
-Update the code to fix the issue. Return only valid Python code; do NOT include Markdown or explanations.
+Please return the **entire updated Python file** with all changes applied.
+Do NOT include Markdown, explanations, or partial snippets.
+Return every line from the original file, including unchanged code.
 """
 
 # ----------------- CALL OPENAI -----------------
 response = openai.chat.completions.create(
     model="gpt-4",
     messages=[{"role": "user", "content": prompt}],
-    temperature=0
+    temperature=0,
+    max_tokens=5000  # Increase if your file is large
 )
 
 updated_code = response.choices[0].message.content
 
-# ----------------- STRIP MARKDOWN/EXTRA TEXT -----------------
-# Remove ``` or ```python blocks and any leading explanation
-clean_code = re.sub(r"```(?:python)?\n", "", updated_code)
+# ----------------- CLEAN THE OUTPUT -----------------
+# Remove any Markdown ```python blocks or triple backticks
+clean_code = re.sub(r"```(?:python)?\n?", "", updated_code)
 clean_code = re.sub(r"```", "", clean_code)
-clean_code = re.sub(r"(?i)^.*# main\.py\n", "", clean_code)
-clean_code = clean_code.strip()
+clean_code = clean_code.strip()  # Keep all remaining code
 
 # ----------------- CREATE NEW BRANCH -----------------
 branch_name = f"issue-{uuid.uuid4().hex[:8]}"
