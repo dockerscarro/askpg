@@ -16,6 +16,8 @@ def main():
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
     # Collect current .py files (skip .github folder)
+    # Only include store.py, ignore all others
+     # Collect current .py files (skip .github folder)
     code_files = {}
     for root, _, files in os.walk("."):
         if ".github" in root:
@@ -25,6 +27,7 @@ def main():
                 path = os.path.join(root, file)
                 with open(path, "r", encoding="utf-8") as f:
                     code_files[path] = f.read()
+
 
     # Prepare prompt with all .py files
     prompt = f"""
@@ -37,18 +40,14 @@ Here are the current code files:
         prompt += f"\n===== {path} =====\n{content}\n"
 
     prompt += """
-    Please update only the files that are affected by this issue.
-    
-    IMPORTANT:
-    - Do NOT use triple backticks (```).
-    - Do NOT add 'python' or any language tags.
-    - Do NOT include explanations or comments outside the file content.
-    - Only return in this format for each updated file:
-    
-    FILE: <filepath>
-    <updated file content>
-    """
+Please update only the files that are affected by this issue.
+Return results strictly in this format for each updated file:
 
+FILE: <filepath>
+<updated file content>
+
+Do not include explanations. Only return the updated files.
+"""
 
     # Call OpenAI
     response = client.chat.completions.create(
@@ -59,10 +58,7 @@ Here are the current code files:
         ]
     )
 
-  
     updated_code = response.choices[0].message.content.strip()
-   
-
 
     # Parse and write updated files
     for block in updated_code.split("FILE: "):
@@ -87,3 +83,4 @@ Here are the current code files:
 
 if __name__ == "__main__":
     main()
+
