@@ -29,14 +29,15 @@ Here is the existing Python code:\n{code}\n
 Update the code to fix the issue.
 """
 
-# Call OpenAI
 response = openai.chat.completions.create(
     model="gpt-4",
     messages=[{"role": "user", "content": prompt}],
     temperature=0
 )
 
-updated_code = response.choices[0].message["content"]
+# Access the content correctly
+updated_code = response.choices[0].message.content
+
 
 
 # Create new branch
