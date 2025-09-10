@@ -28,13 +28,13 @@ jobs:
           pip install --upgrade pip
           pip install openai
 
-      # Run Python script
       - name: Run Python script to update code
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
         run: |
-          echo "${{ github.event.issue.body }}" > issue_body.txt
+          printf "%s" "${{ github.event.issue.body }}" > issue_body.txt
           python update_code.py "${{ github.event.issue.title }}" issue_body.txt
+
 
       # Commit and push
       - name: Commit & push changes
