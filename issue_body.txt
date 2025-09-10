@@ -1,0 +1,1 @@
+In app.py, change st.title(Big Sample Streamlit App) so the heading is aligned to the left.
