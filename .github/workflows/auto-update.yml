@@ -1,0 +1,33 @@
+name: Auto Update Code for Issues
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  auto_update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          token: ${{ secrets.GH_PAT }}  # Use GH_PAT for full access
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install openai gitpython requests
+
+      - name: Run update script
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python scripts/auto_update.py
