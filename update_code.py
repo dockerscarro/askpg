@@ -37,14 +37,18 @@ Here are the current code files:
         prompt += f"\n===== {path} =====\n{content}\n"
 
     prompt += """
-Please update only the files that are affected by this issue.
-Return results strictly in this format for each updated file:
+    Please update only the files that are affected by this issue.
+    
+    IMPORTANT:
+    - Do NOT use triple backticks (```).
+    - Do NOT add 'python' or any language tags.
+    - Do NOT include explanations or comments outside the file content.
+    - Only return in this format for each updated file:
+    
+    FILE: <filepath>
+    <updated file content>
+    """
 
-FILE: <filepath>
-<updated file content>
-
-Do not include explanations. Only return the updated files.
-"""
 
     # Call OpenAI
     response = client.chat.completions.create(
