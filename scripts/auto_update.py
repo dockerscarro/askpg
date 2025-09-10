@@ -33,12 +33,8 @@ Description: {issue_body}
 Here is the existing Python code:
 {code}
 
-Update the code to fix the issue.
-Return the FULL UPDATED PYTHON FILE.
-Do not skip unchanged lines.
-Do not use placeholders like ... or comments to indicate skipped code.
-Do not include Markdown, explanations, or extra text.
-Output ONLY valid Python code.
+Update the code to fix the issue. 
+Return only valid Python code, no Markdown fences, no explanations.
 """
 
 # ----------------- CALL OPENAI -----------------
@@ -51,9 +47,17 @@ response = openai.chat.completions.create(
 updated_code = response.choices[0].message.content
 
 # ----------------- STRIP MARKDOWN/EXTRA TEXT -----------------
-# Remove any accidental ``` blocks or explanations
-clean_code = re.sub(r"```(?:python)?\n", "", updated_code)
+clean_code = updated_code
+
+# Remove ```python / ``` fences
+clean_code = re.sub(r"```(?:python)?", "", clean_code)
 clean_code = re.sub(r"```", "", clean_code)
+
+# Drop any leading text before first import/from/def/class
+split_code = re.split(r'(?=^import |^from |^def |^class )', clean_code, flags=re.M)
+if len(split_code) > 1:
+    clean_code = split_code[-1]
+
 clean_code = clean_code.strip()
 
 # ----------------- CREATE NEW BRANCH -----------------
