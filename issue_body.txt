@@ -1,0 +1,4 @@
+
+
+
+include quantity to multiply along with its prices in the function
