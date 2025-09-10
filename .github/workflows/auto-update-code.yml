@@ -28,10 +28,13 @@ jobs:
           pip install --upgrade pip
           pip install openai
 
-      # Save issue body safely (handles emojis, backticks, etc.)
+            # Save issue body safely
       - name: Save issue body
         run: |
-          echo '${{ toJSON(github.event.issue.body) }}' > issue_body.txt
+          cat <<'EOF' > issue_body.txt
+          ${{ toJSON(github.event.issue.body) }}
+          EOF
+
 
       # Run Python script
       - name: Run Python script to update code
