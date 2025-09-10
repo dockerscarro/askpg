@@ -11,12 +11,4 @@ def calculate_discounted_total(cart, discount=0):
     return total
 
 
-# Example usage
-if __name__ == "__main__":
-    cart = [
-        {"name": "Book", "price": 15, "qty": 2},
-        {"name": "Pen", "price": 5, "qty": 3},
-    ]
-    discount = 5
-    total = calculate_discounted_total(cart, discount)
-    print(f"Cart total after discount: ${total}")
+
