@@ -1,13 +1,12 @@
-# main.py
-def add_numbers(a, b):
+def add_numbers(a: int, b: int) -> int:
     """Adds two numbers"""
     return a + b
 
-def multiply_numbers(a, b):
+def multiply_numbers(a: int, b: int) -> int:
     """Multiplies two numbers"""
     return a * b
 
-def divide_numbers(a, b):
+def divide_numbers(a: int, b: int) -> float:
     """Divides a by b"""
     return a / b
 
