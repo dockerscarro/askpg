@@ -4,73 +4,75 @@ from git import Repo
 import uuid
 import requests
 
-# Config
+# ----------------- CONFIG -----------------
 repo_dir = os.getcwd()
 main_branch = "main"
+target_file = "main.py"  # Change to your Python file
 openai.api_key = os.getenv("OPENAI_API_KEY")
-
-# Get issue info
+GH_PAT = os.getenv("GH_PAT")
+repo_owner, repo_name = os.getenv("GITHUB_REPOSITORY").split("/")
 issue_title = os.getenv("ISSUE_TITLE")
 issue_body = os.getenv("ISSUE_BODY")
 
-# Checkout repo
+# ----------------- GIT SETUP -----------------
 repo = Repo(repo_dir)
+# Set Git identity to avoid commit errors
+repo.git.config("user.name", "github-actions[bot]")
+repo.git.config("user.email", "github-actions[bot]@users.noreply.github.com")
 repo.git.checkout(main_branch)
 
-# Example: update main.py (adjust for your repo)
-target_file = "main.py"
+# ----------------- READ EXISTING CODE -----------------
 with open(target_file, "r") as f:
     code = f.read()
 
-# Create prompt for OpenAI
+# ----------------- CREATE OPENAI PROMPT -----------------
 prompt = f"""
-Issue: {issue_title}\nDescription: {issue_body}\n
-Here is the existing Python code:\n{code}\n
+Issue: {issue_title}
+Description: {issue_body}
+
+Here is the existing Python code:
+{code}
+
 Update the code to fix the issue.
 """
 
+# ----------------- CALL OPENAI -----------------
 response = openai.chat.completions.create(
     model="gpt-4",
     messages=[{"role": "user", "content": prompt}],
     temperature=0
 )
 
-# Access the content correctly
 updated_code = response.choices[0].message.content
 
-
-
-# Create new branch
+# ----------------- CREATE NEW BRANCH -----------------
 branch_name = f"issue-{uuid.uuid4().hex[:8]}"
-repo.git.checkout('-b', branch_name)
+repo.git.checkout("-b", branch_name)
 
-# Write updated code
+# ----------------- WRITE UPDATED CODE -----------------
 with open(target_file, "w") as f:
     f.write(updated_code)
 
-# Commit and push
+# ----------------- COMMIT & PUSH -----------------
 repo.git.add(target_file)
 repo.git.commit("-m", f"Update code for issue: {issue_title}")
 repo.git.push("origin", branch_name)
 
-# Create Pull Request
-GITHUB_TOKEN = os.getenv("GH_PAT")
-repo_owner, repo_name = os.getenv("GITHUB_REPOSITORY").split("/")
-
-url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls"
+# ----------------- CREATE PULL REQUEST -----------------
+pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls"
 headers = {
-    "Authorization": f"token {GITHUB_TOKEN}",
+    "Authorization": f"token {GH_PAT}",
     "Accept": "application/vnd.github+json"
 }
-data = {
+pr_data = {
     "title": f"Fix: {issue_title}",
     "head": branch_name,
     "base": main_branch,
-    "body": f"Auto-generated update for issue: {issue_body}"
+    "body": f"Auto-generated update for issue:\n\n{issue_body}"
 }
 
-r = requests.post(url, headers=headers, json=data)
+r = requests.post(pr_url, headers=headers, json=pr_data)
 if r.status_code == 201:
-    print(f"Pull request created for branch {branch_name}")
+    print(f"✅ Pull request created: {r.json()['html_url']}")
 else:
-    print(f"Failed to create PR: {r.status_code} {r.text}")
+    print(f"❌ Failed to create PR: {r.status_code} {r.text}")
