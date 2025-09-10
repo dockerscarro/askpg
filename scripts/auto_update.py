@@ -30,13 +30,14 @@ Update the code to fix the issue.
 """
 
 # Call OpenAI
-response = openai.ChatCompletion.create(
+response = openai.chat.completions.create(
     model="gpt-4",
     messages=[{"role": "user", "content": prompt}],
     temperature=0
 )
 
-updated_code = response.choices[0].message.content
+updated_code = response.choices[0].message["content"]
+
 
 # Create new branch
 branch_name = f"issue-{uuid.uuid4().hex[:8]}"
