@@ -33,8 +33,9 @@ Description: {issue_body}
 Here is the existing Python code:
 {code}
 
-Update the code to fix the issue. 
-Return only valid Python code, no Markdown fences, no explanations.
+Update the ENTIRE code file to fix the issue. 
+Always return the full Python script, not just a function or a snippet. 
+Do NOT include Markdown (like ```), explanations, or comments — only valid Python code.
 """
 
 # ----------------- CALL OPENAI -----------------
@@ -47,18 +48,17 @@ response = openai.chat.completions.create(
 updated_code = response.choices[0].message.content
 
 # ----------------- STRIP MARKDOWN/EXTRA TEXT -----------------
-clean_code = updated_code
+# Extract only the code block if present
+code_blocks = re.findall(r"```(?:python)?\n([\s\S]*?)```", updated_code)
+if code_blocks:
+    clean_code = code_blocks[0].strip()
+else:
+    clean_code = updated_code.strip()
 
-# Remove ```python / ``` fences
-clean_code = re.sub(r"```(?:python)?", "", clean_code)
-clean_code = re.sub(r"```", "", clean_code)
-
-# Drop any leading text before first import/from/def/class
-split_code = re.split(r'(?=^import |^from |^def |^class )', clean_code, flags=re.M)
-if len(split_code) > 1:
-    clean_code = split_code[-1]
-
-clean_code = clean_code.strip()
+# Fallback: if the new code is suspiciously short, keep original
+if len(clean_code.splitlines()) < len(code.splitlines()) // 2:
+    print("⚠️ Warning: Model returned partial code, keeping original.")
+    clean_code = code
 
 # ----------------- CREATE NEW BRANCH -----------------
 branch_name = f"issue-{uuid.uuid4().hex[:8]}"
