@@ -1,0 +1,7 @@
+
+
+
+In the current Streamlit app, the main heading (📊 Sample Streamlit App) is centered by default.
+Please update the code so that the heading appears aligned to the left side instead.
+
+You can use st.markdown() with custom HTML/CSS or Streamlit's alignment options to achieve this.
