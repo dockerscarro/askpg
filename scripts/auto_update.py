@@ -3,11 +3,12 @@ import openai
 from git import Repo
 import uuid
 import requests
+import re
 
 # ----------------- CONFIG -----------------
 repo_dir = os.getcwd()
 main_branch = "main"
-target_file = "main.py"  # Change to your Python file
+target_file = "main.py"  # Your Python file
 openai.api_key = os.getenv("OPENAI_API_KEY")
 GH_PAT = os.getenv("GH_PAT")
 repo_owner, repo_name = os.getenv("GITHUB_REPOSITORY").split("/")
@@ -16,7 +17,6 @@ issue_body = os.getenv("ISSUE_BODY")
 
 # ----------------- GIT SETUP -----------------
 repo = Repo(repo_dir)
-# Set Git identity to avoid commit errors
 repo.git.config("user.name", "github-actions[bot]")
 repo.git.config("user.email", "github-actions[bot]@users.noreply.github.com")
 repo.git.checkout(main_branch)
@@ -33,7 +33,7 @@ Description: {issue_body}
 Here is the existing Python code:
 {code}
 
-Update the code to fix the issue.
+Update the code to fix the issue. Return only valid Python code; do NOT include Markdown or explanations.
 """
 
 # ----------------- CALL OPENAI -----------------
@@ -45,13 +45,20 @@ response = openai.chat.completions.create(
 
 updated_code = response.choices[0].message.content
 
+# ----------------- STRIP MARKDOWN/EXTRA TEXT -----------------
+# Remove ``` or ```python blocks and any leading explanation
+clean_code = re.sub(r"```(?:python)?\n", "", updated_code)
+clean_code = re.sub(r"```", "", clean_code)
+clean_code = re.sub(r"(?i)^.*# main\.py\n", "", clean_code)
+clean_code = clean_code.strip()
+
 # ----------------- CREATE NEW BRANCH -----------------
 branch_name = f"issue-{uuid.uuid4().hex[:8]}"
 repo.git.checkout("-b", branch_name)
 
-# ----------------- WRITE UPDATED CODE -----------------
+# ----------------- WRITE CLEAN CODE -----------------
 with open(target_file, "w") as f:
-    f.write(updated_code)
+    f.write(clean_code)
 
 # ----------------- COMMIT & PUSH -----------------
 repo.git.add(target_file)
