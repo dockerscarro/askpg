@@ -1,15 +1,18 @@
 import os
-import openai
 from git import Repo
 import uuid
 import requests
 import re
+from langchain_openai import ChatOpenAI
+from langchain.schema import HumanMessage
 
 # ----------------- CONFIG -----------------
 repo_dir = os.getcwd()
 main_branch = "main"
 target_file = "main.py"  # Your Python file
-openai.api_key = os.getenv("OPENAI_API_KEY")
+
+# Read API keys from environment variables
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GH_PAT = os.getenv("GH_PAT")
 repo_owner, repo_name = os.getenv("GITHUB_REPOSITORY").split("/")
 issue_title = os.getenv("ISSUE_TITLE")
@@ -26,30 +29,38 @@ with open(target_file, "r") as f:
     code = f.read()
 
 # ----------------- CREATE OPENAI PROMPT -----------------
-prompt = f"""
-Issue: {issue_title}
-Description: {issue_body}
+generate_prompt = f"""
+You are an expert Python developer.
 
-Here is the existing Python code:
+Current {target_file} code:
 {code}
 
-Update the ENTIRE code file to fix the issue. 
-Always return the full Python script, not just a function or a snippet. 
-Do NOT include Markdown (like ```), explanations, or comments — only valid Python code.
+Issue to solve:
+Title: {issue_title}
+Description: {issue_body}
+
+Update the ENTIRE code file to fix the issue.
+Return ONLY the full Python script (no markdown, no explanations).
+Ensure the final code is valid and executable.
 """
 
 # ----------------- CALL OPENAI -----------------
-response = openai.chat.completions.create(
-    model="gpt-4",
-    messages=[{"role": "user", "content": prompt}],
-    temperature=0
+chat_model = ChatOpenAI(
+    temperature=0,
+    model="gpt-4o-mini",
+    openai_api_key=OPENAI_API_KEY,
+    max_tokens=1500
 )
 
-updated_code = response.choices[0].message.content
+try:
+    response = chat_model.invoke([HumanMessage(content=generate_prompt)])
+    updated_code = response.content.strip()
+except Exception as e:
+    print(f"❌ GPT failed to generate updated code: {e}")
+    exit(1)
 
 # ----------------- STRIP MARKDOWN/EXTRA TEXT -----------------
-# Extract only the code block if present
-code_blocks = re.findall(r"```(?:python)?\n([\s\S]*?)```", updated_code)
+code_blocks = re.findall(r"```(?:python)?\s*(.*?)```", updated_code, flags=re.S)
 if code_blocks:
     clean_code = code_blocks[0].strip()
 else:
