@@ -1,10 +1,10 @@
 import os
-from git import Repo
 import uuid
+from git import Repo
 import requests
-import re
-from langchain.chat_models import ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain.schema import HumanMessage
+import re
 
 # ----------------- CONFIG -----------------
 repo_dir = os.getcwd()
