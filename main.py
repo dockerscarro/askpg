@@ -39,6 +39,9 @@ def list_tasks():
             print(f"[{row[0]}] {row[1]} ({row[2]}) - Created at {row[3]}")
 
 def update_task_status(task_id, new_status):
+    if new_status not in ['pending', 'done']:
+        print("❌ Invalid status. Please use 'pending' or 'done'.")
+        return
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
