@@ -44,16 +44,18 @@ REPLACE:
 WITH:
 <new code>
 
-INSERT ABOVE:
-<new code to insert>
+INSERT BELOW ANCHOR:
+<exact existing line in main.py as anchor>
+<new code to insert below anchor>
 
-INSERT BELOW:
-<new code to insert>
+INSERT ABOVE ANCHOR:
+<exact existing line in main.py as anchor>
+<new code to insert above anchor>
 
 REMOVE:
 <code to remove>
 
-Only include the changes. No explanations, no markdown, no extra text.
+Only include the changes. Include exact anchor lines from the current code to ensure correct placement. No explanations, no markdown, no extra text.
 """
 
 # ----------------- CALL OPENAI -----------------
@@ -72,6 +74,7 @@ def apply_patch(original_code: str, patch: str) -> str:
     i = 0
     while i < len(lines):
         line = lines[i].strip()
+
         if line.startswith("REPLACE:"):
             old_block, new_block = [], []
             i += 1
@@ -88,27 +91,29 @@ def apply_patch(original_code: str, patch: str) -> str:
             new_code_block = "\n".join(new_block).strip()
             new_code = new_code.replace(old_code, new_code_block)
 
-        elif line.startswith("INSERT ABOVE:"):
-            block = []
+        elif line.startswith("INSERT BELOW ANCHOR:") or line.startswith("INSERT ABOVE ANCHOR:"):
             i += 1
+            if i >= len(lines):
+                break
+            anchor = lines[i].rstrip("\n")
+            i += 1
+            block = []
             while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
                 block.append(lines[i])
                 i += 1
-            insert_text = "\n".join(block).strip()
-            new_code = insert_text + "\n" + new_code
-
-        elif line.startswith("INSERT BELOW:"):
-            block = []
-            i += 1
-            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
-                block.append(lines[i])
-                i += 1
-            insert_text = "\n".join(block).strip()
-            new_code = new_code + "\n" + insert_text
+            insert_text = "\n".join(block).rstrip("\n")
+            if anchor not in new_code:
+                # fallback: append to end
+                new_code += "\n" + insert_text
+            else:
+                if line.startswith("INSERT BELOW ANCHOR:"):
+                    new_code = new_code.replace(anchor, anchor + "\n" + insert_text)
+                else:  # INSERT ABOVE ANCHOR
+                    new_code = new_code.replace(anchor, insert_text + "\n" + anchor)
 
         elif line.startswith("REMOVE:"):
-            block = []
             i += 1
+            block = []
             while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
                 block.append(lines[i])
                 i += 1
