@@ -12,12 +12,16 @@ def init_db():
                     title TEXT NOT NULL,
                     description TEXT,
                     status TEXT NOT NULL DEFAULT 'pending',
+                    priority TEXT NOT NULL DEFAULT 'medium',
                     created_at TEXT NOT NULL
                 )''')
     conn.commit()
     conn.close()
 
 def add_task(title, description=""):
+    priority = "medium":
+        c.execute("INSERT INTO tasks (title, description, created_at, priority) VALUES (?, ?, ?, ?)",
+                  (title, description, datetime.utcnow().isoformat(), priority))
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("INSERT INTO tasks (title, description, created_at) VALUES (?, ?, ?)",
@@ -27,6 +31,31 @@ def add_task(title, description=""):
     print("✅ Task added!")
 
 def list_tasks():
+    def update_task_priority(task_id, priority):
+    def check_overdue_tasks():
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT id, title, status, created_at FROM tasks WHERE created_at < ?", (datetime.utcnow().isoformat(),))
+        rows = c.fetchall()
+        conn.close()
+        if not rows:
+            print("📂 No overdue tasks found.")
+        else:
+            for row in rows:
+                print(f"[{row[0]}] {row[1]} ({row[2]}) - Created at {row[3]}")
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        if c.fetchone() is None:
+            print("❌ Task not found.")
+            return
+        c.execute("UPDATE tasks SET priority = ? WHERE id = ?", (priority, task_id))
+        conn.commit()
+        conn.close()
+        print("🔄 Task priority updated!")
+    c.execute("SELECT id, title, status, priority, created_at FROM tasks ORDER BY created_at DESC")
+            for row in rows:
+                print(f"[{row[0]}] {row[1]} ({row[2]}, Priority: {row[3]}) - Created at {row[4]}")
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT id, title, status, created_at FROM tasks ORDER BY created_at DESC")
@@ -70,7 +99,9 @@ def main():
         print("2. List tasks")
         print("3. Update task status")
         print("4. Delete task")
-        print("5. Exit")
+        print("print("6. Update task priority")
+        print("7. Check overdue tasks")
+5. Exit")
         choice = input("Enter choice: ")
 
         if choice == "1":
