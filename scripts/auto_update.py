@@ -44,18 +44,16 @@ REPLACE:
 WITH:
 <new code>
 
-INSERT BELOW ANCHOR:
-<exact existing line in main.py as anchor>
-<new code to insert below anchor>
+INSERT ABOVE FUNCTION function_name:
+<new code to insert>
 
-INSERT ABOVE ANCHOR:
-<exact existing line in main.py as anchor>
-<new code to insert above anchor>
+INSERT BELOW FUNCTION function_name:
+<new code to insert>
 
 REMOVE:
 <code to remove>
 
-Only include the changes. Include exact anchor lines from the current code to ensure correct placement. No explanations, no markdown, no extra text.
+Only include the changes. No explanations, no markdown, no extra text.
 """
 
 # ----------------- CALL OPENAI -----------------
@@ -68,6 +66,19 @@ response = openai.chat.completions.create(
 patch_text = response.choices[0].message.content.strip()
 
 # ----------------- APPLY PATCH LOCALLY -----------------
+def find_function_block(code_lines, function_name):
+    start_idx, end_idx = None, None
+    pattern = re.compile(rf"^\s*def\s+{re.escape(function_name)}\s*\(")
+    for i, line in enumerate(code_lines):
+        if start_idx is None and pattern.match(line):
+            start_idx = i
+        elif start_idx is not None and line.startswith("def ") and i > start_idx:
+            end_idx = i
+            break
+    if start_idx is not None and end_idx is None:
+        end_idx = len(code_lines)
+    return start_idx, end_idx
+
 def apply_patch(original_code: str, patch: str) -> str:
     new_code = original_code
     lines = patch.splitlines()
@@ -91,34 +102,46 @@ def apply_patch(original_code: str, patch: str) -> str:
             new_code_block = "\n".join(new_block).strip()
             new_code = new_code.replace(old_code, new_code_block)
 
-        elif line.startswith("INSERT BELOW ANCHOR:") or line.startswith("INSERT ABOVE ANCHOR:"):
-            i += 1
-            if i >= len(lines):
-                break
-            anchor = lines[i].rstrip("\n")
-            i += 1
-            block = []
-            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
-                block.append(lines[i])
-                i += 1
-            insert_text = "\n".join(block).rstrip("\n")
-            if anchor not in new_code:
-                # fallback: append to end
-                new_code += "\n" + insert_text
-            else:
-                if line.startswith("INSERT BELOW ANCHOR:"):
-                    new_code = new_code.replace(anchor, anchor + "\n" + insert_text)
-                else:  # INSERT ABOVE ANCHOR
-                    new_code = new_code.replace(anchor, insert_text + "\n" + anchor)
-
         elif line.startswith("REMOVE:"):
-            i += 1
             block = []
+            i += 1
             while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
                 block.append(lines[i])
                 i += 1
             remove_text = "\n".join(block).strip()
             new_code = new_code.replace(remove_text, "")
+
+        elif line.startswith("INSERT ABOVE FUNCTION"):
+            func_name = line.split("INSERT ABOVE FUNCTION")[1].strip(" :")
+            block = []
+            i += 1
+            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
+                block.append(lines[i])
+                i += 1
+            insert_text = "\n".join(block)
+            code_lines = new_code.splitlines()
+            start_idx, _ = find_function_block(code_lines, func_name)
+            if start_idx is not None:
+                code_lines = code_lines[:start_idx] + [insert_text] + code_lines[start_idx:]
+            else:
+                code_lines.append(insert_text)
+            new_code = "\n".join(code_lines)
+
+        elif line.startswith("INSERT BELOW FUNCTION"):
+            func_name = line.split("INSERT BELOW FUNCTION")[1].strip(" :")
+            block = []
+            i += 1
+            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
+                block.append(lines[i])
+                i += 1
+            insert_text = "\n".join(block)
+            code_lines = new_code.splitlines()
+            start_idx, end_idx = find_function_block(code_lines, func_name)
+            if start_idx is not None:
+                code_lines = code_lines[:end_idx] + [insert_text] + code_lines[end_idx:]
+            else:
+                code_lines.append(insert_text)
+            new_code = "\n".join(code_lines)
 
         else:
             i += 1
