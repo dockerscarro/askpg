@@ -23,16 +23,15 @@ PG_HOST = os.environ["PG_HOST"]
 PG_DB = os.environ["PG_DB"]
 PG_USER = os.environ["PG_USER"]
 PG_PASSWORD = os.environ["PG_PASSWORD"]
-PG_PORT = int(os.environ.get("PG_PORT", "5432"))  # only port has a safe default
+PG_PORT = int(os.environ.get("PG_PORT", "5432"))
 TABLE_NAME = os.environ.get("TABLE_NAME", "uploaded_logs")
 
 EMBEDDER_MODEL = os.getenv("EMBEDDER_MODEL", "all-MiniLM-L6-v2")
 
 embedder = SentenceTransformer("sentence-transformers/all-MiniLM-L6-v2", device="cpu")
 
-
 COLLECTION_NAME = "hybrid-search25"
-QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")   # "qdrant" = service name in docker-compose
+QDRANT_HOST = os.getenv("QDRANT_HOST", "qdrant")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 qdrant_url = os.getenv("QDRANT_URL", "http://qdrant:6333")
 
@@ -54,7 +53,6 @@ def wait_for_qdrant(host, port, timeout=30):
         time.sleep(1)
     raise RuntimeError("Qdrant not ready after waiting.")
 
-# Call this before any collection operations
 wait_for_qdrant(QDRANT_HOST, QDRANT_PORT)
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -157,12 +155,11 @@ def load_logs_from_db():
 
 def setup_qdrant(dimension):
     collections = [c.name for c in client.get_collections().collections]
-    if COLLECTION_NAME in collections:
-        client.delete_collection(COLLECTION_NAME)
-    client.create_collection(
-        COLLECTION_NAME,
-        vectors_config=VectorParams(size=dimension, distance=Distance.COSINE)
-    )
+    if COLLECTION_NAME not in collections:
+        client.create_collection(
+            COLLECTION_NAME,
+            vectors_config=VectorParams(size=dimension, distance=Distance.COSINE)
+        )
 
 def index_texts(texts, batch_size=500):
     if not texts:
@@ -177,17 +174,9 @@ def index_texts(texts, batch_size=500):
 
     ids = [str(uuid.uuid4()) for _ in texts]
 
-    # Create or reset collection
     VECTOR_SIZE = embeddings.shape[1]
-    collections = [c.name for c in client.get_collections().collections]
-    if COLLECTION_NAME in collections:
-        client.delete_collection(COLLECTION_NAME)
-    client.create_collection(
-        COLLECTION_NAME,
-        vectors_config=VectorParams(size=VECTOR_SIZE, distance=Distance.COSINE)
-    )
+    setup_qdrant(VECTOR_SIZE)
 
-    # Batch upserts
     for i in range(0, len(texts), batch_size):
         batch_points = [
             PointStruct(id=ids[j], vector=embeddings[j].tolist(), payload={"text": texts[j]})
@@ -205,11 +194,9 @@ def build_text_loglevel_clusters_v2(
     profile_collection="text_loglevel_clusterss", 
     window=100
 ):
-    """Fetch logs from Qdrant, group by template+level, build clusters, and insert into profile_collection."""
     import bisect
     from collections import defaultdict
 
-    # Fetch all logs
     all_points = []
     points, next_page = client.scroll(
         collection_name=source_collection,
@@ -228,7 +215,6 @@ def build_text_loglevel_clusters_v2(
         )
         all_points.extend(points)
 
-    # Unified regex for timestamp, pid, loglevel, and text
     time_pattern = re.compile(
         r"^(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+)\s+UTC\s+\[(\d+)]\s+([A-Z]+):\s+(.+)$"
     )
@@ -258,19 +244,15 @@ def build_text_loglevel_clusters_v2(
             "log_level": level.upper()
         })
 
-    # Sort messages chronologically
     messages_sorted = sorted(messages, key=lambda x: x["timestamp"])
     timestamps_sorted = [m["timestamp"] for m in messages_sorted]
 
-    # Group by (template_text, log_level)
     text_loglevel_groups = defaultdict(list)
     for msg in messages_sorted:
-        # Normalize template by stripping numbers (like IDs, query IDs, etc.)
         template_text = re.sub(r"\d+", "<NUM>", msg["text"]).strip()
         key = (template_text, msg["log_level"])
         text_loglevel_groups[key].append(msg)
 
-    # Build clusters
     clusters = []
     for (template_text, log_level), msgs in text_loglevel_groups.items():
         cluster_messages = []
@@ -294,7 +276,6 @@ def build_text_loglevel_clusters_v2(
             "profiling": {"cluster_size": len(cluster_messages)}
         })
 
-    # Recreate profile collection
     if client.collection_exists(profile_collection):
         client.delete_collection(profile_collection)
     client.create_collection(
@@ -305,7 +286,6 @@ def build_text_loglevel_clusters_v2(
         )
     )
 
-    # Insert clusters
     for cluster in clusters:
         cluster_text = " ".join([m["text"] for m in cluster["messages"]])
         vector = embedder.encode(cluster_text).tolist()
@@ -314,7 +294,6 @@ def build_text_loglevel_clusters_v2(
             points=[PointStruct(id=cluster["cluster_id"], vector=vector, payload=cluster)]
         )
 
-    # Save locally
     with open("text_loglevel_clusters.json", "w") as f:
         json.dump(clusters, f, indent=4)
 
@@ -322,7 +301,7 @@ def build_text_loglevel_clusters_v2(
 
 def extract_date_from_query(query):
     try:
-        return parse(query, fuzzy=True).strftime('%Y-%m-%d')
+        return parser.parse(query, fuzzy=True).strftime('%Y-%m-%d')
     except Exception:
         return None
 
@@ -388,10 +367,6 @@ def extract_log_ts(log):
             return None
 
 def normalize_for_embedding(log):
-    """
-    Keep only severity + message, drop timestamp/PID.
-    Example: "ERROR: could not connect to server: Connection refused"
-    """
     try:
         return log.split("] ", 1)[1] 
     except Exception:
@@ -443,7 +418,6 @@ if uploaded_files:
                 st.session_state.uploaded_file_name = uploaded_file.name
                 st.session_state.uploaded_handled = True
 
-
     if not st.session_state.get("indexed", False):
         with st.spinner("⚙️ Indexing logs for search..."):
             all_logs = load_logs_from_db()
@@ -457,7 +431,6 @@ else:
     st.info("📂 Please upload a file to insert and index logs.")
 
 def query_cluster_profiles(user_query, top_k=10):
-    """Semantic search on clusters in text_loglevel_clusterss collection."""
     q_vector = embedder.encode(user_query).tolist()  
 
     results = client.search(
@@ -496,17 +469,15 @@ if search_clicked and query and st.session_state.get("indexed"):
             st.markdown(f"**Log Level:** {cluster.get('log_level', 'N/A')}")
             st.markdown(f"**Cluster Size:** {len(cluster.get('messages', []))} messages")
 
-            # Collect logs from the cluster
             for msg in cluster.get("messages", []):
                 ts = msg.get("raw_timestamp", msg.get("timestamp", "N/A"))
-                pid = msg.get("pid", "N/A")  # if you stored PID in your payload
+                pid = msg.get("pid", "N/A")
                 level = msg.get("log_level", "UNKNOWN")
                 text = msg.get("text", "")
                 formatted_log = f"[{ts}] [{pid}] {level}: {text}"
                 st.write(f"- {formatted_log}")
                 all_cluster_logs.append(formatted_log)
 
-            # Now fetch similar clusters
             cluster_text = " ".join([m.get("text", "") for m in cluster.get("messages", [])])
             cluster_vector = embedder.encode(cluster_text).tolist()
             similar_clusters = client.search(
@@ -602,4 +573,3 @@ if search_clicked and query and st.session_state.get("indexed"):
 
         except Exception as e:
             st.error(f"❌ GPT analysis failed: {e}")
-
