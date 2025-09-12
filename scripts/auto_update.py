@@ -44,11 +44,11 @@ REPLACE:
 WITH:
 <new code>
 
-INSERT ABOVE FUNCTION function_name:
-<new code to insert>
+INSERT BELOW FUNCTION <function_name>:
+<new code>
 
-INSERT BELOW FUNCTION function_name:
-<new code to insert>
+INSERT ABOVE LINE <exact_line_text>:
+<new code>
 
 REMOVE:
 <code to remove>
@@ -66,26 +66,15 @@ response = openai.chat.completions.create(
 patch_text = response.choices[0].message.content.strip()
 
 # ----------------- APPLY PATCH LOCALLY -----------------
-def find_function_block(code_lines, function_name):
-    start_idx, end_idx = None, None
-    pattern = re.compile(rf"^\s*def\s+{re.escape(function_name)}\s*\(")
-    for i, line in enumerate(code_lines):
-        if start_idx is None and pattern.match(line):
-            start_idx = i
-        elif start_idx is not None and line.startswith("def ") and i > start_idx:
-            end_idx = i
-            break
-    if start_idx is not None and end_idx is None:
-        end_idx = len(code_lines)
-    return start_idx, end_idx
-
 def apply_patch(original_code: str, patch: str) -> str:
     new_code = original_code
     lines = patch.splitlines()
     i = 0
+
     while i < len(lines):
         line = lines[i].strip()
 
+        # ----------------- REPLACE -----------------
         if line.startswith("REPLACE:"):
             old_block, new_block = [], []
             i += 1
@@ -93,15 +82,52 @@ def apply_patch(original_code: str, patch: str) -> str:
                 old_block.append(lines[i])
                 i += 1
             i += 1
-            while i < len(lines) and not any(
-                lines[i].startswith(x) for x in ["REPLACE:", "INSERT", "REMOVE"]
-            ):
+            while i < len(lines) and not any(lines[i].startswith(x) for x in ["REPLACE:", "INSERT", "REMOVE"]):
                 new_block.append(lines[i])
                 i += 1
             old_code = "\n".join(old_block).strip()
             new_code_block = "\n".join(new_block).strip()
             new_code = new_code.replace(old_code, new_code_block)
 
+        # ----------------- INSERT BELOW FUNCTION -----------------
+        elif line.startswith("INSERT BELOW FUNCTION"):
+            func_name = re.search(r"INSERT BELOW FUNCTION (\w+):", line).group(1)
+            block = []
+            i += 1
+            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
+                block.append(lines[i])
+                i += 1
+            insert_text = "\n".join(block).strip()
+            # find function definition anchor
+            pattern = rf"(def {func_name}\(.*\):)"
+            match = re.search(pattern, new_code)
+            if match:
+                insert_point = match.end()
+                new_code = new_code[:insert_point] + "\n    " + insert_text.replace("\n", "\n    ") + new_code[insert_point:]
+            else:
+                # fallback: append at end
+                new_code += "\n" + insert_text
+
+        # ----------------- INSERT ABOVE LINE -----------------
+        elif line.startswith("INSERT ABOVE LINE"):
+            exact_line = re.search(r"INSERT ABOVE LINE (.+):", line).group(1)
+            block = []
+            i += 1
+            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
+                block.append(lines[i])
+                i += 1
+            insert_text = "\n".join(block).strip()
+            # find exact line
+            pattern = re.escape(exact_line)
+            match = re.search(pattern, new_code)
+            if match:
+                insert_point = match.start()
+                new_code = new_code[:insert_point] + insert_text + "\n" + new_code[insert_point:]
+            else:
+                # fallback: append at end
+                new_code += "\n" + insert_text
+
+        # ----------------- REMOVE -----------------
         elif line.startswith("REMOVE:"):
             block = []
             i += 1
@@ -111,43 +137,13 @@ def apply_patch(original_code: str, patch: str) -> str:
             remove_text = "\n".join(block).strip()
             new_code = new_code.replace(remove_text, "")
 
-        elif line.startswith("INSERT ABOVE FUNCTION"):
-            func_name = line.split("INSERT ABOVE FUNCTION")[1].strip(" :")
-            block = []
-            i += 1
-            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
-                block.append(lines[i])
-                i += 1
-            insert_text = "\n".join(block)
-            code_lines = new_code.splitlines()
-            start_idx, _ = find_function_block(code_lines, func_name)
-            if start_idx is not None:
-                code_lines = code_lines[:start_idx] + [insert_text] + code_lines[start_idx:]
-            else:
-                code_lines.append(insert_text)
-            new_code = "\n".join(code_lines)
-
-        elif line.startswith("INSERT BELOW FUNCTION"):
-            func_name = line.split("INSERT BELOW FUNCTION")[1].strip(" :")
-            block = []
-            i += 1
-            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
-                block.append(lines[i])
-                i += 1
-            insert_text = "\n".join(block)
-            code_lines = new_code.splitlines()
-            start_idx, end_idx = find_function_block(code_lines, func_name)
-            if start_idx is not None:
-                code_lines = code_lines[:end_idx] + [insert_text] + code_lines[end_idx:]
-            else:
-                code_lines.append(insert_text)
-            new_code = "\n".join(code_lines)
-
         else:
             i += 1
 
     return new_code
 
+
+# ----------------- APPLY PATCH -----------------
 merged_code = apply_patch(code, patch_text)
 
 # ----------------- CREATE NEW BRANCH -----------------
