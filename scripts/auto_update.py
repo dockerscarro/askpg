@@ -1,18 +1,15 @@
 import os
-import uuid
-from git import Repo
-import requests
-from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage
 import re
+import uuid
+import requests
+from git import Repo
+import openai
 
 # ----------------- CONFIG -----------------
 repo_dir = os.getcwd()
 main_branch = "main"
-target_file = "main.py"  # Your Python file
-
-# Read API keys from environment variables
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+target_file = "main.py"
+openai.api_key = os.getenv("OPENAI_API_KEY")
 GH_PAT = os.getenv("GH_PAT")
 repo_owner, repo_name = os.getenv("GITHUB_REPOSITORY").split("/")
 issue_title = os.getenv("ISSUE_TITLE")
@@ -29,55 +26,109 @@ with open(target_file, "r") as f:
     code = f.read()
 
 # ----------------- CREATE OPENAI PROMPT -----------------
-generate_prompt = f"""
-You are an expert Python developer.
+prompt = f"""
+You are a code refactoring assistant.
 
-Current {target_file} code:
-{code}
-
-Issue to solve:
-Title: {issue_title}
+Issue: {issue_title}
 Description: {issue_body}
 
-Update the ENTIRE code file to fix the issue.
-Return ONLY the full Python script (no markdown, no explanations).
-Ensure the final code is valid and executable.
+Here is the current file **main.py**:
+{code}
+
+⚠️ IMPORTANT:
+- Do NOT return the entire file.
+- Instead, return patch instructions in this format:
+
+REPLACE:
+<old code>
+WITH:
+<new code>
+
+INSERT ABOVE:
+<new code to insert>
+
+INSERT BELOW:
+<new code to insert>
+
+REMOVE:
+<code to remove>
+
+Only include the changes. No explanations, no markdown, no extra text.
 """
 
 # ----------------- CALL OPENAI -----------------
-chat_model = ChatOpenAI(
-    temperature=0,
+response = openai.chat.completions.create(
     model="gpt-4o-mini",
-    openai_api_key=OPENAI_API_KEY,
-    max_tokens=1500
+    messages=[{"role": "user", "content": prompt}],
+    temperature=0
 )
 
-try:
-    response = chat_model.invoke([HumanMessage(content=generate_prompt)])
-    updated_code = response.content.strip()
-except Exception as e:
-    print(f"❌ GPT failed to generate updated code: {e}")
-    exit(1)
+patch_text = response.choices[0].message.content.strip()
 
-# ----------------- STRIP MARKDOWN/EXTRA TEXT -----------------
-code_blocks = re.findall(r"```(?:python)?\s*(.*?)```", updated_code, flags=re.S)
-if code_blocks:
-    clean_code = code_blocks[0].strip()
-else:
-    clean_code = updated_code.strip()
+# ----------------- APPLY PATCH LOCALLY -----------------
+def apply_patch(original_code: str, patch: str) -> str:
+    new_code = original_code
+    lines = patch.splitlines()
+    i = 0
+    while i < len(lines):
+        line = lines[i].strip()
+        if line.startswith("REPLACE:"):
+            old_block, new_block = [], []
+            i += 1
+            while i < len(lines) and not lines[i].startswith("WITH:"):
+                old_block.append(lines[i])
+                i += 1
+            i += 1
+            while i < len(lines) and not any(
+                lines[i].startswith(x) for x in ["REPLACE:", "INSERT", "REMOVE"]
+            ):
+                new_block.append(lines[i])
+                i += 1
+            old_code = "\n".join(old_block).strip()
+            new_code_block = "\n".join(new_block).strip()
+            new_code = new_code.replace(old_code, new_code_block)
 
-# Fallback: if the new code is suspiciously short, keep original
-if len(clean_code.splitlines()) < len(code.splitlines()) // 2:
-    print("⚠️ Warning: Model returned partial code, keeping original.")
-    clean_code = code
+        elif line.startswith("INSERT ABOVE:"):
+            block = []
+            i += 1
+            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
+                block.append(lines[i])
+                i += 1
+            insert_text = "\n".join(block).strip()
+            new_code = insert_text + "\n" + new_code
+
+        elif line.startswith("INSERT BELOW:"):
+            block = []
+            i += 1
+            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
+                block.append(lines[i])
+                i += 1
+            insert_text = "\n".join(block).strip()
+            new_code = new_code + "\n" + insert_text
+
+        elif line.startswith("REMOVE:"):
+            block = []
+            i += 1
+            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
+                block.append(lines[i])
+                i += 1
+            remove_text = "\n".join(block).strip()
+            new_code = new_code.replace(remove_text, "")
+
+        else:
+            i += 1
+
+    return new_code
+
+merged_code = apply_patch(code, patch_text)
 
 # ----------------- CREATE NEW BRANCH -----------------
 branch_name = f"issue-{uuid.uuid4().hex[:8]}"
 repo.git.checkout("-b", branch_name)
 
-# ----------------- WRITE CLEAN CODE -----------------
+# ----------------- WRITE MERGED CODE -----------------
 with open(target_file, "w") as f:
-    f.write(clean_code)
+    f.write(merged_code)
 
 # ----------------- COMMIT & PUSH -----------------
 repo.git.add(target_file)
@@ -94,7 +145,7 @@ pr_data = {
     "title": f"Fix: {issue_title}",
     "head": branch_name,
     "base": main_branch,
-    "body": f"Auto-generated update for issue:\n\n{issue_body}"
+    "body": f"Auto-generated update for issue:\n\n{issue_body}\n\nPatch applied:\n\n{patch_text}"
 }
 
 r = requests.post(pr_url, headers=headers, json=pr_data)
