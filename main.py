@@ -12,12 +12,21 @@ def init_db():
                     title TEXT NOT NULL,
                     description TEXT,
                     status TEXT NOT NULL DEFAULT 'pending',
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    priority TEXT NOT NULL DEFAULT 'medium'
                 )''')
     conn.commit()
     conn.close()
 
 def add_task(title, description=""):
+    def add_task(title, description="", priority="medium"):
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("INSERT INTO tasks (title, description, created_at, priority) VALUES (?, ?, ?, ?)",
+                  (title, description, datetime.utcnow().isoformat(), priority))
+        conn.commit()
+        conn.close()
+        print("✅ Task added!")
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("INSERT INTO tasks (title, description, created_at) VALUES (?, ?, ?)",
@@ -27,6 +36,17 @@ def add_task(title, description=""):
     print("✅ Task added!")
 
 def list_tasks():
+    def list_tasks():
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT id, title, status, created_at, priority FROM tasks ORDER BY created_at DESC")
+        rows = c.fetchall()
+        conn.close()
+        if not rows:
+            print("📂 No tasks found.")
+        else:
+            for row in rows:
+                print(f"[{row[0]}] {row[1]} ({row[2]}) - Created at {row[3]} - Priority: {row[4]}")
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute("SELECT id, title, status, created_at FROM tasks ORDER BY created_at DESC")
@@ -63,6 +83,41 @@ def delete_task(task_id):
     print("🗑️ Task deleted!")
 
 def main():
+    def check_overdue_tasks():
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT id, title, status, created_at FROM tasks WHERE status = 'pending' AND created_at < ?", 
+                  (datetime.utcnow().isoformat(),))
+        rows = c.fetchall()
+        conn.close()
+        if not rows:
+            print("📂 No overdue tasks found.")
+        else:
+            for row in rows:
+                print(f"[{row[0]}] {row[1]} ({row[2]}) - Created at {row[3]}")
+    def update_task_priority(task_id, priority):
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute("SELECT * FROM tasks WHERE id = ?", (task_id,))
+        if c.fetchone() is None:
+            print("❌ Task not found.")
+            return
+        c.execute("UPDATE tasks SET priority = ? WHERE id = ?", (priority, task_id))
+        conn.commit()
+        conn.close()
+        print("🔄 Task priority updated!")
+    elif choice == "6":
+                try:
+                    task_id = int(input("Task ID: "))
+                except ValueError:
+                    print("❌ Invalid input. Please enter an integer.")
+                    continue
+                priority = input("New priority (low/medium/high): ")
+                update_task_priority(task_id, priority)
+            elif choice == "7":
+                check_overdue_tasks()
+    print("6. Update task priority")
+            print("7. Check overdue tasks")
     init_db()
     while True:
         print("\n📌 Task Manager")
