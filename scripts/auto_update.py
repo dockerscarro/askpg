@@ -1,14 +1,14 @@
 import os
-import re
+import openai
+from git import Repo
 import uuid
 import requests
-from git import Repo
-import openai
+import re
 
 # ----------------- CONFIG -----------------
 repo_dir = os.getcwd()
 main_branch = "main"
-target_file = "main.py"
+target_file = "main.py"  # Your Python file
 openai.api_key = os.getenv("OPENAI_API_KEY")
 GH_PAT = os.getenv("GH_PAT")
 repo_owner, repo_name = os.getenv("GITHUB_REPOSITORY").split("/")
@@ -27,33 +27,15 @@ with open(target_file, "r") as f:
 
 # ----------------- CREATE OPENAI PROMPT -----------------
 prompt = f"""
-You are a code refactoring assistant.
-
 Issue: {issue_title}
 Description: {issue_body}
 
-Here is the current file **main.py**:
+Here is the existing Python code:
 {code}
 
-⚠️ IMPORTANT:
-- Do NOT return the entire file.
-- Instead, return patch instructions in this format:
-
-REPLACE:
-<old code>
-WITH:
-<new code>
-
-INSERT BELOW FUNCTION <function_name>:
-<new code>
-
-INSERT ABOVE LINE <exact_line_text>:
-<new code>
-
-REMOVE:
-<code to remove>
-
-Only include the changes. No explanations, no markdown, no extra text.
+Update the ENTIRE code file to fix the issue. 
+Always return the full Python script, not just a function or a snippet. 
+Do NOT include Markdown (like ```), explanations, or comments — only valid Python code.
 """
 
 # ----------------- CALL OPENAI -----------------
@@ -63,96 +45,28 @@ response = openai.chat.completions.create(
     temperature=0
 )
 
-patch_text = response.choices[0].message.content.strip()
+updated_code = response.choices[0].message.content
 
-# ----------------- APPLY PATCH LOCALLY -----------------
-def apply_patch(original_code: str, patch: str) -> str:
-    new_code = original_code
-    lines = patch.splitlines()
-    i = 0
+# ----------------- STRIP MARKDOWN/EXTRA TEXT -----------------
+# Extract only the code block if present
+code_blocks = re.findall(r"```(?:python)?\n([\s\S]*?)```", updated_code)
+if code_blocks:
+    clean_code = code_blocks[0].strip()
+else:
+    clean_code = updated_code.strip()
 
-    while i < len(lines):
-        line = lines[i].strip()
-
-        # ----------------- REPLACE -----------------
-        if line.startswith("REPLACE:"):
-            old_block, new_block = [], []
-            i += 1
-            while i < len(lines) and not lines[i].startswith("WITH:"):
-                old_block.append(lines[i])
-                i += 1
-            i += 1
-            while i < len(lines) and not any(lines[i].startswith(x) for x in ["REPLACE:", "INSERT", "REMOVE"]):
-                new_block.append(lines[i])
-                i += 1
-            old_code = "\n".join(old_block).strip()
-            new_code_block = "\n".join(new_block).strip()
-            new_code = new_code.replace(old_code, new_code_block)
-
-        # ----------------- INSERT BELOW FUNCTION -----------------
-        elif line.startswith("INSERT BELOW FUNCTION"):
-            func_name = re.search(r"INSERT BELOW FUNCTION (\w+):", line).group(1)
-            block = []
-            i += 1
-            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
-                block.append(lines[i])
-                i += 1
-            insert_text = "\n".join(block).strip()
-            # find function definition anchor
-            pattern = rf"(def {func_name}\(.*\):)"
-            match = re.search(pattern, new_code)
-            if match:
-                insert_point = match.end()
-                new_code = new_code[:insert_point] + "\n    " + insert_text.replace("\n", "\n    ") + new_code[insert_point:]
-            else:
-                # fallback: append at end
-                new_code += "\n" + insert_text
-
-        # ----------------- INSERT ABOVE LINE -----------------
-        elif line.startswith("INSERT ABOVE LINE"):
-            exact_line = re.search(r"INSERT ABOVE LINE (.+):", line).group(1)
-            block = []
-            i += 1
-            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
-                block.append(lines[i])
-                i += 1
-            insert_text = "\n".join(block).strip()
-            # find exact line
-            pattern = re.escape(exact_line)
-            match = re.search(pattern, new_code)
-            if match:
-                insert_point = match.start()
-                new_code = new_code[:insert_point] + insert_text + "\n" + new_code[insert_point:]
-            else:
-                # fallback: append at end
-                new_code += "\n" + insert_text
-
-        # ----------------- REMOVE -----------------
-        elif line.startswith("REMOVE:"):
-            block = []
-            i += 1
-            while i < len(lines) and not lines[i].startswith(("REPLACE:", "INSERT", "REMOVE")):
-                block.append(lines[i])
-                i += 1
-            remove_text = "\n".join(block).strip()
-            new_code = new_code.replace(remove_text, "")
-
-        else:
-            i += 1
-
-    return new_code
-
-
-# ----------------- APPLY PATCH -----------------
-merged_code = apply_patch(code, patch_text)
+# Fallback: if the new code is suspiciously short, keep original
+if len(clean_code.splitlines()) < len(code.splitlines()) // 2:
+    print("⚠️ Warning: Model returned partial code, keeping original.")
+    clean_code = code
 
 # ----------------- CREATE NEW BRANCH -----------------
 branch_name = f"issue-{uuid.uuid4().hex[:8]}"
 repo.git.checkout("-b", branch_name)
 
-# ----------------- WRITE MERGED CODE -----------------
+# ----------------- WRITE CLEAN CODE -----------------
 with open(target_file, "w") as f:
-    f.write(merged_code)
+    f.write(clean_code)
 
 # ----------------- COMMIT & PUSH -----------------
 repo.git.add(target_file)
@@ -169,7 +83,7 @@ pr_data = {
     "title": f"Fix: {issue_title}",
     "head": branch_name,
     "base": main_branch,
-    "body": f"Auto-generated update for issue:\n\n{issue_body}\n\nPatch applied:\n\n{patch_text}"
+    "body": f"Auto-generated update for issue:\n\n{issue_body}"
 }
 
 r = requests.post(pr_url, headers=headers, json=pr_data)
