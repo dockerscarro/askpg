@@ -40,7 +40,7 @@ Do NOT include Markdown (like ```), explanations, or comments — only valid Pyt
 
 # ----------------- CALL OPENAI -----------------
 response = openai.chat.completions.create(
-    model="gpt-5",
+    model="gpt-4o-mini",
     messages=[{"role": "user", "content": prompt}],
     temperature=0
 )
