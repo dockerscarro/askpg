@@ -12,7 +12,8 @@ def init_db():
                     title TEXT NOT NULL,
                     description TEXT,
                     status TEXT NOT NULL DEFAULT 'pending',
-                    created_at TEXT NOT NULL
+                    created_at TEXT NOT NULL,
+                    due_date TEXT
                 )''')
     conn.commit()
     conn.close()
@@ -20,8 +21,10 @@ def init_db():
 def add_task(title, description=""):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("INSERT INTO tasks (title, description, created_at) VALUES (?, ?, ?)",
-              (title, description, datetime.utcnow().isoformat()))
+    due_date = input("Due date (YYYY-MM-DD or leave blank for none): ")
+    due_date = due_date if due_date else None
+    c.execute("INSERT INTO tasks (title, description, created_at, due_date) VALUES (?, ?, ?, ?)",
+              (title, description, datetime.utcnow().isoformat(), due_date))
     conn.commit()
     conn.close()
     print("✅ Task added!")
@@ -29,7 +32,7 @@ def add_task(title, description=""):
 def list_tasks():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute("SELECT id, title, status, created_at FROM tasks ORDER BY created_at DESC")
+    c.execute("SELECT id, title, status, created_at, due_date FROM tasks ORDER BY created_at DESC")
     rows = c.fetchall()
     conn.close()
     if not rows:
@@ -102,3 +105,28 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+if row[4]:
+            print(f" - Due by {row[4]}")
+        else:
+            print(" - No due date")
+def search_tasks(keyword):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT id, title, status, created_at, due_date FROM tasks WHERE title LIKE ? OR description LIKE ?",
+              ('%' + keyword + '%', '%' + keyword + '%'))
+    rows = c.fetchall()
+    conn.close()
+    if not rows:
+        print("📂 No tasks found.")
+    else:
+        for row in rows:
+            print(f"[{row[0]}] {row[1]} ({row[2]}) - Created at {row[3]}", end="")
+            if row[4]:
+                print(f" - Due by {row[4]}")
+            else:
+                print(" - No due date")
+print("6. Search tasks")
+elif choice == "6":
+            keyword = input("Enter keyword to search: ")
+            search_tasks(keyword)
